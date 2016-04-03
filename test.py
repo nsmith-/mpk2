@@ -1,21 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
+import argparse
 import rtmidi
 import time
 
 send = rtmidi.MidiOut()
 recv = rtmidi.MidiIn()
 recv.ignore_types(False)  # Don't ignore sysex!
-
-print repr(send.get_ports())
-print repr(recv.get_ports())
-remotePort = 4
-
-send.open_port(remotePort)
-
-
-def sender(msg):
-    send.send_message((ord(c) for c in msg.replace(' ', '').decode('hex')))
 
 
 class MPK2Sysex:
@@ -239,11 +230,24 @@ class MPK2Sysex:
         print 'Keyboard split config: ' + self.pretty(splitConfig)
 
 
-recv.open_port(remotePort)
-done = False
-while not done:
-    msg = recv.get_message()
-    if msg:
-        MPK2Sysex(msg[0])
-        exit(0)
-    time.sleep(0.1)
+def main():
+    parser = argparse.ArgumentParser(description='Waits for MPK program dump sysex and prints result')
+    agroup = parser.add_mutually_exclusive_group(required=True)
+    agroup.add_argument('--port', '-p', help='MIDI Port number', type=int)
+    agroup.add_argument('--list', '-l', help='List ports available', action='store_true')
+    args = parser.parse_args()
+
+    if args.list:
+        for iport, portname in enumerate(recv.get_ports()):
+            print '\tPort % 2d: %s' % (iport, portname)
+    elif args.port:
+        recv.open_port(args.port)
+        while True:
+            msg = recv.get_message()
+            if msg:
+                MPK2Sysex(msg[0])
+                exit(0)
+            time.sleep(0.1)
+
+if __name__ == '__main__':
+    main()
