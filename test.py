@@ -43,6 +43,22 @@ class MPK2Sysex:
         0x0F: 'Pastel_Pink',
         0x10: 'Grey',
         }
+    dawButtons = {
+        0x00: 'Enter',
+        0x01: 'Left',
+        0x02: 'Right',
+        0x03: 'Up',
+        0x04: 'Down',
+        }
+    keyboardSplitOptions = {
+        0: 'Pitch Bend',
+        1: 'Mod Wheel',
+        2: 'Footswitch 1',
+        3: 'Footswitch 2',
+        4: 'Expression Pedal',
+        5: 'Arpeggiator',
+        6: 'Aftertouch',
+        }
 
     def pretty(self, data):
         return ' '.join('{:02x}'.format(i) for i in data)
@@ -75,12 +91,12 @@ class MPK2Sysex:
             raise Exception('Sysex message not from MPK261, not going to try to parse it for now')
 
         msgSize = self.msbUnpack(self._data[5:7])
-        expectedSize = 4+3+msgSize+1 # header + command + size bytes + message + 0xf7
+        expectedSize = 4+3+msgSize+1  # header + command + size bytes + message + 0xf7
         if len(self._data) != expectedSize:
             raise Exception('Sysex message appears to have wrong size! Expected %d, got %d' % (expectedSize, msgSize))
 
         command = self._data[4]
-        if command is 0x10 :
+        if command is 0x10:
             self.readPresetDump()
 
     def readPresetDump(self):
@@ -100,17 +116,26 @@ class MPK2Sysex:
             self.readFaderSpec(i)
         for i in range(24):
             self.readKnobSpec(i)
+        for button in range(5):
+            self.readDAWControlSpec(button)
+        self.readKeyboardSplitSpec()
         self.readMiscSpec()
 
     def readKeyboardSpec(self):
         '''
             @ 0x01d:
-            keyboard spec (21? bytes)
-            [midi ch] [octave (0=4)] [01] [01] [00] [transpose (0=24)]
+            keyboard spec (7? bytes)
+            [midi ch] [octave (0=4)] [01] [01] [din] [transpose (0=24)] 03
 
+            @ 0x024:
+            expression pedal (14 bytes?)
+            [midi ch] [midi cc] [min] [max] 00
+            @ 0x029:
+            pitch bend
+            [midi ch] [din?]
             @ 0x032:
             2x pedal spec (6 bytes)
-            [cc / tap / play / rec / stop / playstop / arp / sustain] [midi ch] [midi cc] 00 00 00
+            [cc / tap / play / rec / stop / playstop / arp / sustain] [midi ch] [midi cc] 00 [din] 00
         '''
         offset = 0x1d
         keyboardSpec = self._data[offset:offset+21]
@@ -140,7 +165,7 @@ class MPK2Sysex:
         '''
         offset = 0x465 + switch*13
         switchSpec = self._data[offset:offset+13]
-        print 'Bank %s Switch %u spec: ' % (self.bankName(switch/8), switch%8+1) + self.pretty(switchSpec)
+        print 'Bank %s Switch %u spec: ' % (self.bankName(switch/8), switch % 8 + 1) + self.pretty(switchSpec)
 
     def readKnobSpec(self, knob):
         '''
@@ -150,7 +175,7 @@ class MPK2Sysex:
         '''
         offset = 0x2fd + knob*9
         knobSpec = self._data[offset:offset+9]
-        print 'Bank %s Knob %u spec: ' % (self.bankName(knob/8), knob%8+1) + self.pretty(knobSpec)
+        print 'Bank %s Knob %u spec: ' % (self.bankName(knob/8), knob % 8 + 1) + self.pretty(knobSpec)
 
     def readFaderSpec(self, fader):
         '''
@@ -160,25 +185,59 @@ class MPK2Sysex:
         '''
         offset = 0x3df + fader*6
         faderSpec = self._data[offset:offset+6]
-        print 'Bank %s Fader %u spec: ' % (self.bankName(fader/8), fader%8+1) + self.pretty(faderSpec)
+        print 'Bank %s Fader %u spec: ' % (self.bankName(fader/8), fader % 8 + 1) + self.pretty(faderSpec)
+
+    def readDAWControlSpec(self, button):
+        '''
+            @ 0x59d
+            5x daw control spec (13 bytes)
+            button : {enter, left, right, up, down}
+            [cc / note / pgm / pgmbank / keystroke] 00 [midi cc] 00 00 00 00 00 00 7f 00 [key 1] [key 2]
+        '''
+        offset = 0x59d + button*13
+        buttonSpec = self._data[offset:offset+13]
+        buttonName = MPK2Sysex.dawButtons[button]
+        print 'Button %5s spec: ' % buttonName + self.pretty(buttonSpec)
 
     def readMiscSpec(self):
         '''
-            @ 0x59d
+            @ 0x5de
             Not sure
-            # 0x5e4:
-            [foot1 type] [foot1 cc]
-            @ 0x5f7:
-            [split on] [split key] [B channel]
-            < 117 values
         '''
-        offset = 0x59d
-        miscSpec = self._data[offset:offset+117]
+        offset = 0x5de
+        miscSpec = self._data[offset:0x5e9]
+        print 'Unknown spec: ' + self.pretty(miscSpec)
+        offset = 0x5e9+14+3
+        miscSpec = self._data[offset:]
         print 'Unknown spec: ' + self.pretty(miscSpec)
 
-def callback(tup, extra):
-    data, deltaT = tup
-    message = MPK2Sysex(data)
+    def readKeyboardSplitSpec(self):
+        '''
+            @ 0x5e9:
+            Split A: pb mw f1 f2 ex ap af
+            Split B: pb mw f1 f2 ex ap af
+            [split on] [split key] [B channel]
+        '''
+        offset = 0x5e9
+        splitAopts = self._data[offset:offset+7]
+        offset = 0x5e9 + 7
+        splitBopts = self._data[offset:offset+7]
+        offset = 0x5e9 + 7*2
+        splitConfig = self._data[offset:offset+3]
+
+        for iopt, optName in MPK2Sysex.keyboardSplitOptions.iteritems():
+            enabled = 'Off'
+            if splitAopts[iopt] and splitBopts[iopt]:
+                enabled = 'A+B'
+            elif splitAopts[iopt] and (not splitBopts[iopt]):
+                enabled = 'A'
+            elif (not splitAopts[iopt]) and splitBopts[iopt]:
+                enabled = 'B'
+            else:
+                enabled = 'A+B'
+            print 'Keyboard split %16s: %s' % (optName, enabled)
+        print 'Keyboard split config: ' + self.pretty(splitConfig)
+
 
 recv.open_port(remotePort)
 done = False
@@ -188,4 +247,3 @@ while not done:
         MPK2Sysex(msg[0])
         exit(0)
     time.sleep(0.1)
-
