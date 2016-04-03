@@ -2,6 +2,11 @@
 This is a collection of notes and tools from reverse engineering the AKAI MPK261 controller.
 I don't have access to other 2 series controllers, but I wouldn't be surprised if things were similar...
 
+_Disclaimer:_ Use of this material can possibly void your warranty, brick your controller, or both!
+
+_License:_ Do whatever you want, but include a link to https://github.com/nsmith-/mpk2
+
+### Installation
 To use python script(s), you will need `rtmidi`.  On my OS X machine, the following was sufficient:
 ```sh
 brew install rtmidi
