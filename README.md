@@ -2,10 +2,19 @@
 This is a collection of notes and tools from reverse engineering the AKAI MPK261 controller.
 I don't have access to other 2 series controllers, but I wouldn't be surprised if things were similar...
 
+To use python script(s), you will need `rtmidi`.  On my OS X machine, the following was sufficient:
+```sh
+brew install rtmidi
+pip install python-rtmidi
+```
+
 ### Previous work
 http://practicalusage.com/akai-mpk261-mpk2-series-controlling-the-controller-with-sysex/
+
 http://practicalusage.com/akai-mpk261-one-more-thing/
+
 http://www.akaipro.com/files/product_downloads/MPK2_Series_Bitwig_Scripts_v1.0.8.zip
+
 
 ### Sysex format
 All numbers below in hex
@@ -77,4 +86,4 @@ Pad on colors:
 ```
 
 ### Program dump format:
-See test.py comments for each dump type
+See readProgramDump.py comments for class `MPK2Sysex`, in particular, `read*Spec()` functions.
